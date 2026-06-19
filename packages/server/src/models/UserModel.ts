@@ -167,8 +167,10 @@ export default class UserModel extends BaseModel<User> {
 			if (config.enabled) {
 				const ldapUser = await ldapLogin(email, password, user, config);
 				if (ldapUser && !user) {
-					const savedUser: User = await this.save(ldapUser, { skipValidation: true });
-					return savedUser;
+					const savedUser = await this.save(ldapUser, { skipValidation: true });
+					// Reload so default-filled columns (e.g. totp_secret) are present;
+					// ldapLogin returns a bare user and getIsMFAEnabled requires the field.
+					return await this.load(savedUser.id);
 				}
 				if (ldapUser && user) {
 					return ldapUser;
