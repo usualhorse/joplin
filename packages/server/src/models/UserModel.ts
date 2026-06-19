@@ -829,7 +829,10 @@ export default class UserModel extends BaseModel<User> {
 
 	public async hasMFAEnabled(email: string) {
 		const user = await this.loadByEmail(email, { fields: ['totp_secret'] });
-		if (!user) throw new ErrorForbidden('Invalid email or password', { details: { email } });
+		// No local user row yet (e.g. first-time LDAP login): report no MFA so the
+		// login flow falls through to LDAP instead of failing here. Also avoids
+		// leaking account existence via the MFA-status side channel.
+		if (!user) return false;
 		return getIsMFAEnabled(user);
 	}
 
