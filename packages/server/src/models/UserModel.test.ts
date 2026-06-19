@@ -1,4 +1,4 @@
-import { createUserAndSession, beforeAllDb, afterAllTests, beforeEachDb, models, checkThrowAsync, expectThrow, createUser, expectHttpError } from '../utils/testing/testUtils';
+import { createUserAndSession, beforeAllDb, afterAllTests, beforeEachDb, models, db, dbSlave, checkThrowAsync, expectThrow, createUser, expectHttpError } from '../utils/testing/testUtils';
 import { EmailSender, UserFlagType } from '../services/database/types';
 import { ErrorBadRequest, ErrorUnprocessableEntity } from '../utils/errors';
 import { betaUserDateRange, stripeConfig } from '../utils/stripe';
@@ -7,6 +7,11 @@ import { failedPaymentFinalAccount, failedPaymentWarningInterval } from './Subsc
 import { stripePortalUrl } from '../utils/urlUtils';
 import { Day } from '../utils/time';
 import config from '../config';
+import ldapLogin from '../utils/ldapLogin';
+import { getIsMFAEnabled } from './utils/user';
+import newModelFactory from './factory';
+
+jest.mock('../utils/ldapLogin');
 
 describe('UserModel', () => {
 
@@ -624,6 +629,41 @@ describe('UserModel', () => {
 		const user = await createUser(1);
 		expect(await models().user().hasMFAEnabled(user.email)).toBe(false);
 		expect(await models().user().hasMFAEnabled('nonexistent@example.com')).toBe(false);
+	});
+
+	test('should fully hydrate an auto-created user on first LDAP login', async () => {
+		// Build the model with the LDAP config passed directly into construction:
+		// UserModel snapshots ldapConfig in its constructor, so mutating the shared
+		// config() singleton afterwards would not reach this instance.
+		const ldapConfig = [{
+			enabled: true,
+			userCreation: true,
+			host: '',
+			mailAttribute: '',
+			fullNameAttribute: '',
+			baseDN: '',
+			bindDN: '',
+			bindPW: '',
+			tlsCaFile: '',
+		}];
+		(ldapLogin as jest.Mock).mockResolvedValue({
+			email: 'ldap-first@example.com',
+			password: '',
+			email_confirmed: 1,
+			full_name: 'LDAP First',
+		});
+
+		try {
+			const userModel = newModelFactory(db(), dbSlave(), { ...config(), ldap: ldapConfig }).user();
+			const user = await userModel.login('ldap-first@example.com', '123456');
+			expect(ldapLogin).toHaveBeenCalled();
+			expect(user.id).toBeTruthy();
+			// Before the fix, login() returned ldapLogin's bare object, which lacked
+			// totp_secret, so this downstream check threw 'Missing totp_secret property'.
+			expect(getIsMFAEnabled(user)).toBe(false);
+		} finally {
+			(ldapLogin as jest.Mock).mockReset();
+		}
 	});
 
 });
