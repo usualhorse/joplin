@@ -551,9 +551,13 @@ describe('UserModel', () => {
 	test('should not log in an user using a email/password combo when the local auth is disabled', async () => {
 		config().LOCAL_AUTH_ENABLED = false;
 
-		const user = await createUser();
+		try {
+			const user = await createUser();
 
-		expect(await models().user().login(user.email, '123456')).toBe(null);
+			expect(await models().user().login(user.email, '123456')).toBe(null);
+		} finally {
+			config().LOCAL_AUTH_ENABLED = true;
+		}
 	});
 
 	test('should not change user properties managed by SAML', async () => {
