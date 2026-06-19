@@ -617,4 +617,13 @@ describe('UserModel', () => {
 		}
 	});
 
+	test('should report no MFA when the user does not exist locally', async () => {
+		// Regression: a first-time LDAP login has no local user row yet, so the
+		// pre-auth MFA check must report false instead of throwing — otherwise
+		// authentication never falls through to the LDAP code path.
+		const user = await createUser(1);
+		expect(await models().user().hasMFAEnabled(user.email)).toBe(false);
+		expect(await models().user().hasMFAEnabled('nonexistent@example.com')).toBe(false);
+	});
+
 });
