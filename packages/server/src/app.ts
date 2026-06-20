@@ -122,6 +122,12 @@ async function main() {
 
 	const app = new Koa();
 
+	// Trust the reverse proxy so Koa derives the protocol from X-Forwarded-Proto
+	// (and the client IP from X-Forwarded-For). Without this, a TLS-terminating
+	// proxy makes every request look like plain HTTP, so secure cookies cannot be
+	// issued and the per-IP rate limiter keys on the proxy address.
+	app.proxy = true;
+
 	// Note: the order of middlewares is important. For example, ownerHandler
 	// loads the user, which is then used by notificationHandler. And finally
 	// routeHandler uses data from both previous middlewares. It would be good to
